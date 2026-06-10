@@ -1572,17 +1572,47 @@ function initSignature(name) {
   const canvas = document.getElementById(`sig-${name}`);
   const ctx = canvas.getContext('2d');
   let drawing=false, lx=0, ly=0;
+
   function pos(e) {
     const r=canvas.getBoundingClientRect(), sx=canvas.width/r.width, sy=canvas.height/r.height;
     if(e.touches) return {x:(e.touches[0].clientX-r.left)*sx, y:(e.touches[0].clientY-r.top)*sy};
     return {x:(e.clientX-r.left)*sx, y:(e.clientY-r.top)*sy};
   }
-  canvas.addEventListener('mousedown',  e=>{e.preventDefault();drawing=true;const p=pos(e);lx=p.x;ly=p.y;});
-  canvas.addEventListener('mousemove',  e=>{e.preventDefault();if(!drawing)return;const p=pos(e);ctx.beginPath();ctx.strokeStyle='#1a1e28';ctx.lineWidth=2;ctx.lineCap='round';ctx.moveTo(lx,ly);ctx.lineTo(p.x,p.y);ctx.stroke();lx=p.x;ly=p.y;});
-  canvas.addEventListener('mouseup',    e=>{drawing=false;sigData[name]=canvas.toDataURL();});
-  canvas.addEventListener('touchstart', e=>{e.preventDefault();drawing=true;const p=pos(e);lx=p.x;ly=p.y;},{passive:false});
-  canvas.addEventListener('touchmove',  e=>{e.preventDefault();if(!drawing)return;const p=pos(e);ctx.beginPath();ctx.strokeStyle='#1a1e28';ctx.lineWidth=2;ctx.lineCap='round';ctx.moveTo(lx,ly);ctx.lineTo(p.x,p.y);ctx.stroke();lx=p.x;ly=p.y;},{passive:false});
-  canvas.addEventListener('touchend',   ()=>{drawing=false;sigData[name]=canvas.toDataURL();});
+
+  // Mouse — start solo su click diretto sul canvas
+  canvas.addEventListener('mousedown', e=>{
+    e.preventDefault();
+    drawing=true;
+    const p=pos(e); lx=p.x; ly=p.y;
+  });
+  canvas.addEventListener('mousemove', e=>{
+    e.preventDefault();
+    if(!drawing) return;
+    const p=pos(e);
+    ctx.beginPath(); ctx.strokeStyle='#1a1e28'; ctx.lineWidth=2; ctx.lineCap='round';
+    ctx.moveTo(lx,ly); ctx.lineTo(p.x,p.y); ctx.stroke();
+    lx=p.x; ly=p.y;
+  });
+  canvas.addEventListener('mouseup', e=>{ drawing=false; sigData[name]=canvas.toDataURL(); });
+  // Se il mouse esce dal canvas o viene rilasciato ovunque nel documento → stop disegno
+  canvas.addEventListener('mouseleave', ()=>{ drawing=false; if(Object.keys(ctx.getImageData(0,0,1,1).data.filter?{}:{}).length||true) sigData[name]=canvas.toDataURL(); });
+  document.addEventListener('mouseup', ()=>{ drawing=false; });
+
+  // Touch
+  canvas.addEventListener('touchstart', e=>{
+    e.preventDefault();
+    drawing=true;
+    const p=pos(e); lx=p.x; ly=p.y;
+  },{passive:false});
+  canvas.addEventListener('touchmove', e=>{
+    e.preventDefault();
+    if(!drawing) return;
+    const p=pos(e);
+    ctx.beginPath(); ctx.strokeStyle='#1a1e28'; ctx.lineWidth=2; ctx.lineCap='round';
+    ctx.moveTo(lx,ly); ctx.lineTo(p.x,p.y); ctx.stroke();
+    lx=p.x; ly=p.y;
+  },{passive:false});
+  canvas.addEventListener('touchend', ()=>{ drawing=false; sigData[name]=canvas.toDataURL(); });
 }
 function clearSig(name) { document.getElementById(`sig-${name}`).getContext('2d').clearRect(0,0,400,120); delete sigData[name]; }
 
@@ -1719,6 +1749,74 @@ function scrollToFirstMissing() {
 // ==========================================
 // GENERA PDF -- foto inline per voce
 // ==========================================
+// ==========================================
+// CORREZIONE ORIENTAMENTO FOTO (EXIF)
+// Le foto scattate con telefono in verticale hanno tag EXIF orientation
+// che jsPDF ignora — questa funzione le ruota correttamente
+// ==========================================
+function correctImageOrientation(dataUrl, targetW, targetH) {
+  // Crea un canvas temporaneo, disegna l immagine rispettando l orientamento EXIF
+  // Restituisce un nuovo dataUrl corretto
+  const img = new Image();
+  img.src = dataUrl;
+
+  // Leggi orientamento EXIF dal dataUrl (base64)
+  let orientation = 1;
+  try {
+    const binary = atob(dataUrl.split(',')[1]);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    // Cerca marker EXIF (FFE1) nel JPEG
+    for (let i = 0; i < bytes.length - 1; i++) {
+      if (bytes[i] === 0xFF && bytes[i+1] === 0xE1) {
+        // Trova il tag orientation (0x0112)
+        const exifStart = i + 10;
+        const littleEndian = bytes[exifStart] === 0x49;
+        for (let j = exifStart; j < Math.min(exifStart + 1024, bytes.length - 4); j++) {
+          if (bytes[j] === 0x01 && bytes[j+1] === 0x12) {
+            const valOffset = j + 8;
+            orientation = littleEndian
+              ? bytes[valOffset] + bytes[valOffset+1]*256
+              : bytes[valOffset]*256 + bytes[valOffset+1];
+            break;
+          }
+        }
+        break;
+      }
+    }
+  } catch(e) { orientation = 1; }
+
+  if (orientation === 1) return dataUrl; // nessuna rotazione necessaria
+
+  // Disegna su canvas con rotazione corretta
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  // Per orientamenti 6 e 8 (90 e 270 gradi) scambia larghezza/altezza
+  if (orientation === 6 || orientation === 8) {
+    canvas.width  = img.naturalHeight || img.height || 800;
+    canvas.height = img.naturalWidth  || img.width  || 600;
+  } else {
+    canvas.width  = img.naturalWidth  || img.width  || 800;
+    canvas.height = img.naturalHeight || img.height || 600;
+  }
+
+  ctx.save();
+  switch(orientation) {
+    case 2: ctx.transform(-1, 0, 0,  1, canvas.width, 0); break;
+    case 3: ctx.transform(-1, 0, 0, -1, canvas.width, canvas.height); break;
+    case 4: ctx.transform( 1, 0, 0, -1, 0, canvas.height); break;
+    case 5: ctx.transform( 0, 1, 1,  0, 0, 0); break;
+    case 6: ctx.transform( 0, 1,-1,  0, canvas.width, 0); break;
+    case 7: ctx.transform( 0,-1,-1,  0, canvas.width, canvas.height); break;
+    case 8: ctx.transform( 0,-1, 1,  0, 0, canvas.height); break;
+  }
+  ctx.drawImage(img, 0, 0);
+  ctx.restore();
+
+  return canvas.toDataURL('image/jpeg', 0.85);
+}
+
 function generatePDF() {
   const data = collectFormData();
   if (!data.sito || !data.data) { showToast('⚠️ Completa Sito e Data'); return; }
@@ -1777,7 +1875,8 @@ function generatePDF() {
     doc.setFont('helvetica','bold'); doc.setFontSize(7);
     doc.text(lbl, x, yy);
     doc.setFont('helvetica','normal');
-    doc.text(String(val||'—').substring(0,42), x+doc.getTextWidth(lbl)+1, yy);
+    // gap di 2mm dopo i due punti per evitare testo attaccato
+    doc.text(' ' + String(val||'—').substring(0,42), x+doc.getTextWidth(lbl)+2, yy);
   };
 
   if (data.auditType==='cantiere') {
@@ -1826,9 +1925,10 @@ function generatePDF() {
       if (!val) return; // non dovrebbe mai accadere dopo validazione
 
       // Calcola altezza riga in base alla lunghezza del testo
+      // rowH minimo 9mm per dare respiro anche alle voci brevi
       const textLines = doc.setFontSize(7.5) || doc.splitTextToSize(v.text, CW-22);
       const tLines = doc.splitTextToSize(v.text, CW-22);
-      const rowH = tLines.length > 1 ? 7 + (tLines.length-1)*4 : 7;
+      const rowH = tLines.length > 1 ? 9 + (tLines.length-1)*4 : 9;
       checkY(rowH + 2);
 
       // Sfondo riga
@@ -1856,17 +1956,18 @@ function generatePDF() {
       // Testo voce -- su piu righe se necessario, senza troncamento
       doc.setTextColor(20,20,20); doc.setFontSize(7.5); doc.setFont('helvetica','normal');
       tLines.forEach((line, li) => {
-        doc.text(line, ML+3, y + 4.5 + li*4);
+        doc.text(line, ML+3, y + 5.5 + li*4);
       });
-      y += rowH + 1;
+      y += rowH + 2;
 
-      // Note
+      // Note — con margine superiore per evitare sovrapposizione
       if (r.note) {
+        y += 2; // margine di separazione dalla riga voce
         checkY(7);
         doc.setFontSize(7); doc.setFont('helvetica','italic'); doc.setTextColor(70,70,70);
         const nlines = doc.splitTextToSize('   Nota: '+r.note, CW-6);
         nlines.forEach(l => { checkY(4); doc.text(l,ML+6,y); y+=3.8; });
-        y+=1;
+        y+=2;
         doc.setTextColor(0,0,0);
       }
 
@@ -1881,14 +1982,15 @@ function generatePDF() {
         doc.setTextColor(0,0,0); y+=7;
       }
 
-      // ★ FOTO INLINE per voce (OBS e NC)
+      // ★ FOTO INLINE per voce (OBS e NC) con correzione orientamento EXIF
       if ((val==='OBS'||val==='NC') && r.photos?.length) {
         checkY(46);
         let px = ML+6, py = y;
         r.photos.forEach((ph, pi) => {
           if (px+44 > W-MR) { px=ML+6; py+=52; checkY(52); }
           try {
-            doc.addImage(ph.dataUrl,'JPEG',px,py,42,32);
+            const corrected = correctImageOrientation(ph.dataUrl, 42, 32);
+            doc.addImage(corrected,'JPEG',px,py,42,32);
             if (ph.caption) {
               doc.setFontSize(6); doc.setFont('helvetica','italic'); doc.setTextColor(80,80,80);
               doc.text(ph.caption, px, py+34, {maxWidth:42});
@@ -1917,12 +2019,14 @@ function generatePDF() {
   doc.text('RIEPILOGO', ML+3, y+6);
 
   const Q = CW/4;
+  const STAT_PAD = 2; // margine tra caselle e bordo riepilogo
+  const STAT_W = Q - STAT_PAD*2 - 1;
   const drawStat = (lbl, val, col, x) => {
-    doc.setFillColor(...col); doc.roundedRect(x,y+9,Q-3,12,1,1,'F');
+    doc.setFillColor(...col); doc.roundedRect(x+STAT_PAD,y+9,STAT_W,12,1,1,'F');
     doc.setTextColor(255,255,255); doc.setFontSize(10); doc.setFont('helvetica','bold');
-    doc.text(String(val), x+(Q-3)/2, y+16, {align:'center'});
+    doc.text(String(val), x+STAT_PAD+STAT_W/2, y+16, {align:'center'});
     doc.setFontSize(6); doc.setFont('helvetica','normal');
-    doc.text(lbl, x+(Q-3)/2, y+20, {align:'center'});
+    doc.text(lbl, x+STAT_PAD+STAT_W/2, y+20, {align:'center'});
   };
   drawStat('Conformi',c,[26,122,74],ML);
   drawStat('Osservazioni',obs,[160,96,16],ML+Q);
@@ -1954,30 +2058,42 @@ function generatePDF() {
     y+=4;
   });
 
-  // Note preposto
+  // Note preposto — stessa struttura sezioni checklist
   if (data.notePreposto) {
-    checkY(20);
-    doc.setFillColor(235,242,252);
-    doc.rect(ML,y,CW,4,'F');
-    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(26,74,122);
-    doc.text('DICHIARAZIONI DEL PREPOSTO / REFERENTE IMPRESA', ML+3, y+3);
-    y+=6;
-    doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0); doc.setFontSize(8);
-    const npLines = doc.splitTextToSize(data.notePreposto, CW);
-    npLines.forEach(l => { checkY(5); doc.text(l,ML,y); y+=4.5; });
-    y+=4;
+    checkY(24);
+    // Banda blu come le altre sezioni
+    doc.setFillColor(26,74,122);
+    doc.rect(ML,y,CW,7,'F');
+    doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont('helvetica','bold');
+    doc.text('DICHIARAZIONI DEL PREPOSTO / REFERENTE IMPRESA', ML+3, y+5);
+    doc.setTextColor(0,0,0); y+=9;
+    // Box testo con sfondo chiaro e padding
+    doc.setFillColor(248,250,255);
+    const npLines = doc.splitTextToSize(data.notePreposto, CW-8);
+    const boxH = npLines.length*4.5 + 8;
+    doc.rect(ML,y,CW,boxH,'F');
+    doc.setDrawColor(180,205,230); doc.rect(ML,y,CW,boxH,'S');
+    doc.setFont('helvetica','normal'); doc.setTextColor(30,30,30); doc.setFontSize(8);
+    let ty = y+5;
+    npLines.forEach(l => { doc.text(l, ML+4, ty); ty+=4.5; });
+    y += boxH + 4;
   }
 
   // Foto generali
   if (generalPhotos.length>0) {
     checkY(55);
-    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(26,74,122);
-    doc.text('DOCUMENTAZIONE FOTOGRAFICA GENERALE', ML, y); y+=5;
+    // Banda blu uguale alle sezioni checklist
+    doc.setFillColor(26,74,122);
+    doc.rect(ML,y,CW,7,'F');
+    doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont('helvetica','bold');
+    doc.text('DOCUMENTAZIONE FOTOGRAFICA GENERALE', ML+3, y+5);
+    doc.setTextColor(0,0,0); y+=10;
     let px=ML, py=y;
     generalPhotos.forEach((ph,i) => {
       if(px+54>W-MR) { px=ML; py+=50; checkY(52); }
       try {
-        doc.addImage(ph.dataUrl,'JPEG',px,py,52,38);
+        const corrected = correctImageOrientation(ph.dataUrl, 52, 38);
+        doc.addImage(corrected,'JPEG',px,py,52,38);
         if(ph.caption) {
           doc.setFontSize(6); doc.setFont('helvetica','italic'); doc.setTextColor(80,80,80);
           doc.text(ph.caption, px, py+40, {maxWidth:52});
