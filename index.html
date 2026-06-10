@@ -359,7 +359,7 @@ textarea.form-control{min-height:70px;resize:vertical}
   </div>
   <div class="sec-body" style="padding:14px">
     <div class="photo-zone" onclick="document.getElementById('photo-input-gen').click()">
-      <input type="file" id="photo-input-gen" accept="image/*" multiple onchange="addGeneralPhotos(this)">
+      <input type="file" id="photo-input-gen" accept="image/*" capture="environment" multiple onchange="addGeneralPhotos(this)">
       <div style="font-size:24px">📷</div>
       <div style="font-size:13px;color:var(--gray-mid);margin-top:4px">Tocca per aggiungere foto generali<br><span style="font-size:11px;color:#aaa">Per le foto di singole NC/OBS usa il tasto 📷 accanto a ogni voce</span></div>
     </div>
@@ -1328,7 +1328,7 @@ function buildRow(container, voce, type) {
     <textarea class="cl-note" id="note-${voce.id}" placeholder="Descrizione osservazione / non conformita'..." oninput="saveNote('${voce.id}',this.value)"></textarea>
     <div class="cl-photo-area">
       <label class="cl-photo-btn">
-        <input type="file" accept="image/*" multiple onchange="addVocePhoto('${voce.id}',this)">
+        <input type="file" accept="image/*" capture="environment" multiple onchange="addVocePhoto('${voce.id}',this)">
         📷 Aggiungi foto
       </label>
       <div class="cl-photo-thumbs" id="pthumbs-${voce.id}"></div>
@@ -1750,66 +1750,65 @@ function scrollToFirstMissing() {
 // GENERA PDF -- foto inline per voce
 // ==========================================
 // ==========================================
-// CORREZIONE ORIENTAMENTO FOTO (EXIF)
-// Le foto scattate con telefono in verticale hanno tag EXIF orientation
-// che jsPDF ignora — questa funzione le ruota correttamente
+// CORREZIONE ORIENTAMENTO FOTO (EXIF) — versione asincrona
+// Legge il tag EXIF orientation e ruota il canvas prima di inserire nel PDF
 // ==========================================
-function correctImageOrientation(dataUrl, targetW, targetH) {
-  // Crea un canvas temporaneo, disegna l immagine rispettando l orientamento EXIF
-  // Restituisce un nuovo dataUrl corretto
-  const img = new Image();
-  img.src = dataUrl;
-
-  // Leggi orientamento EXIF dal dataUrl (base64)
-  let orientation = 1;
+function getExifOrientation(dataUrl) {
   try {
     const binary = atob(dataUrl.split(',')[1]);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    // Cerca marker EXIF (FFE1) nel JPEG
     for (let i = 0; i < bytes.length - 1; i++) {
       if (bytes[i] === 0xFF && bytes[i+1] === 0xE1) {
-        // Trova il tag orientation (0x0112)
         const exifStart = i + 10;
+        if (exifStart >= bytes.length) break;
         const littleEndian = bytes[exifStart] === 0x49;
-        for (let j = exifStart; j < Math.min(exifStart + 1024, bytes.length - 4); j++) {
+        for (let j = exifStart; j < Math.min(exifStart + 2048, bytes.length - 4); j++) {
           if (bytes[j] === 0x01 && bytes[j+1] === 0x12) {
             const valOffset = j + 8;
-            orientation = littleEndian
+            if (valOffset + 1 >= bytes.length) break;
+            return littleEndian
               ? bytes[valOffset] + bytes[valOffset+1]*256
               : bytes[valOffset]*256 + bytes[valOffset+1];
-            break;
           }
         }
         break;
       }
     }
-  } catch(e) { orientation = 1; }
+  } catch(e) {}
+  return 1;
+}
 
-  if (orientation === 1) return dataUrl; // nessuna rotazione necessaria
+function correctImageOrientation(dataUrl) {
+  // Versione sincrona: usa un canvas con Image gia caricata
+  // Le immagini sono gia in memoria (dataUrl da FileReader) quindi sono gia caricate
+  const orientation = getExifOrientation(dataUrl);
+  if (orientation === 1) return dataUrl;
 
-  // Disegna su canvas con rotazione corretta
+  const img = new Image();
+  img.src = dataUrl;
+
+  // Forza il caricamento sincrono — l immagine e gia in memoria come dataUrl
+  // quindi il browser la ha gia decodificata quando e stata letta da FileReader
+  const iw = img.naturalWidth  || img.width  || 1200;
+  const ih = img.naturalHeight || img.height || 900;
+
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
 
-  // Per orientamenti 6 e 8 (90 e 270 gradi) scambia larghezza/altezza
-  if (orientation === 6 || orientation === 8) {
-    canvas.width  = img.naturalHeight || img.height || 800;
-    canvas.height = img.naturalWidth  || img.width  || 600;
-  } else {
-    canvas.width  = img.naturalWidth  || img.width  || 800;
-    canvas.height = img.naturalHeight || img.height || 600;
-  }
+  const swap = (orientation >= 5 && orientation <= 8);
+  canvas.width  = swap ? ih : iw;
+  canvas.height = swap ? iw : ih;
 
   ctx.save();
   switch(orientation) {
-    case 2: ctx.transform(-1, 0, 0,  1, canvas.width, 0); break;
-    case 3: ctx.transform(-1, 0, 0, -1, canvas.width, canvas.height); break;
-    case 4: ctx.transform( 1, 0, 0, -1, 0, canvas.height); break;
-    case 5: ctx.transform( 0, 1, 1,  0, 0, 0); break;
-    case 6: ctx.transform( 0, 1,-1,  0, canvas.width, 0); break;
-    case 7: ctx.transform( 0,-1,-1,  0, canvas.width, canvas.height); break;
-    case 8: ctx.transform( 0,-1, 1,  0, 0, canvas.height); break;
+    case 2: ctx.translate(canvas.width,0);  ctx.scale(-1,1);  break;
+    case 3: ctx.translate(canvas.width,canvas.height); ctx.rotate(Math.PI); break;
+    case 4: ctx.translate(0,canvas.height); ctx.scale(1,-1);  break;
+    case 5: ctx.rotate(0.5*Math.PI);  ctx.scale(1,-1);  break;
+    case 6: ctx.rotate(0.5*Math.PI);  ctx.translate(0,-canvas.width); break;
+    case 7: ctx.rotate(-0.5*Math.PI); ctx.translate(-canvas.height,canvas.width); ctx.scale(1,-1); break;
+    case 8: ctx.rotate(-0.5*Math.PI); ctx.translate(-canvas.height,0); break;
   }
   ctx.drawImage(img, 0, 0);
   ctx.restore();
@@ -1989,7 +1988,7 @@ function generatePDF() {
         r.photos.forEach((ph, pi) => {
           if (px+44 > W-MR) { px=ML+6; py+=52; checkY(52); }
           try {
-            const corrected = correctImageOrientation(ph.dataUrl, 42, 32);
+            const corrected = correctImageOrientation(ph.dataUrl);
             doc.addImage(corrected,'JPEG',px,py,42,32);
             if (ph.caption) {
               doc.setFontSize(6); doc.setFont('helvetica','italic'); doc.setTextColor(80,80,80);
@@ -2092,7 +2091,7 @@ function generatePDF() {
     generalPhotos.forEach((ph,i) => {
       if(px+54>W-MR) { px=ML; py+=50; checkY(52); }
       try {
-        const corrected = correctImageOrientation(ph.dataUrl, 52, 38);
+        const corrected = correctImageOrientation(ph.dataUrl);
         doc.addImage(corrected,'JPEG',px,py,52,38);
         if(ph.caption) {
           doc.setFontSize(6); doc.setFont('helvetica','italic'); doc.setTextColor(80,80,80);
