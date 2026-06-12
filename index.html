@@ -231,6 +231,37 @@ textarea.form-control{min-height:70px;resize:vertical}
 .ac-deadline-label{font-size:11px;font-weight:600;color:var(--text-light);white-space:nowrap}
 .ac-deadline-input{border:1px solid var(--gray-border);border-radius:var(--radius);padding:4px 8px;font-size:12px;font-family:inherit;color:var(--text);background:var(--white)}
 .ac-deadline-input:focus{outline:none;border-color:var(--blue-mid)}
+
+/* ── INTERVISTE ── */
+.intervista-block{background:var(--white);border:1px solid var(--gray-border);border-radius:var(--radius-lg);margin-top:12px;overflow:hidden}
+.intervista-header{background:#f0f4fa;border-bottom:1px solid var(--gray-border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.intervista-num{font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.04em}
+.intervista-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;font-weight:700;padding:3px 8px;border-radius:var(--radius)}
+.intervista-del:hover{background:var(--red-bg)}
+.intervista-body{padding:14px}
+.intervista-sogg{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+@media(max-width:560px){.intervista-sogg{grid-template-columns:1fr}}
+.domanda-row{padding:8px 0 8px 0;border-bottom:1px solid #f0f2f5}
+.domanda-row:last-child{border-bottom:none}
+.domanda-testo{font-size:13px;color:var(--text);margin-bottom:6px;line-height:1.4}
+.domanda-testo .dom-num{font-size:11px;font-weight:700;color:var(--blue-mid);margin-right:5px}
+.domanda-testo .dom-cat{font-size:10px;color:var(--gray-mid);font-style:italic;margin-left:4px}
+.domanda-btns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.dom-btn{border:1.5px solid var(--gray-border);border-radius:var(--radius);padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:var(--gray-mid);transition:all .15s}
+.dom-btn[data-dval="SI"].sel   {background:#1a7a4a;border-color:#1a7a4a;color:#fff}
+.dom-btn[data-dval="PARZ"].sel {background:#f39c12;border-color:#f39c12;color:#fff}
+.dom-btn[data-dval="NO"].sel   {background:#c0392b;border-color:#c0392b;color:#fff}
+.dom-btn[data-dval="NA"].sel   {background:#7a8090;border-color:#7a8090;color:#fff}
+.dom-nota{width:100%;border:1px solid var(--gray-border);border-radius:var(--radius);padding:5px 8px;font-size:11px;font-family:inherit;color:var(--text);resize:vertical;min-height:36px;margin-top:8px;margin-bottom:6px;display:none}
+.dom-nota.show{display:block}
+.dom-nota:focus{outline:none;border-color:var(--blue-mid)}
+.toggle-avanzate{display:inline-flex;align-items:center;gap:6px;border:1.5px dashed var(--blue-border);border-radius:var(--radius);padding:6px 12px;font-size:12px;font-weight:600;color:var(--blue-mid);cursor:pointer;background:var(--blue-light);margin:10px 0;transition:all .2s}
+.toggle-avanzate:hover{background:#d8e8f8}
+.domande-avanzate{display:none}
+.domande-avanzate.show{display:block}
+.dom-section-label{font-size:10px;font-weight:700;color:var(--blue-mid);text-transform:uppercase;letter-spacing:.06em;padding:8px 0 4px 0;border-bottom:1px solid var(--blue-border);margin-bottom:4px}
+.add-intervista-btn{display:inline-flex;align-items:center;gap:7px;border:2px dashed var(--blue-border);border-radius:var(--radius-lg);padding:12px 18px;font-size:13px;font-weight:700;color:var(--blue-mid);cursor:pointer;background:var(--blue-light);width:100%;justify-content:center;margin-top:8px;transition:all .2s}
+.add-intervista-btn:hover{background:#d8e8f8;border-color:var(--blue-mid)}
 </style>
 </head>
 <body>
@@ -398,6 +429,21 @@ textarea.form-control{min-height:70px;resize:vertical}
       <label class="form-label">Azioni correttive richieste (AC)</label>
       <textarea id="f-ac" class="form-control" autocomplete="off" style="margin-top:6px;min-height:70px" placeholder="Elenca le azioni correttive richieste con relativa scadenza..."></textarea>
     </div>
+  </div>
+
+  <!-- INTERVISTE OPERATIVE -->
+  <div class="sec-header" style="margin-top:20px">
+    <div class="sec-header-letter">🎤</div>
+    <h3>Interviste operative</h3>
+  </div>
+  <div class="sec-body" style="padding:14px">
+    <div style="font-size:12px;color:var(--text-light);margin-bottom:12px">
+      Sezione opzionale. Aggiungi una o piu interviste a operatori, preposti o dirigenti presenti durante il sopralluogo.
+    </div>
+    <div id="interviste-container"></div>
+    <button class="add-intervista-btn" onclick="addIntervista()">
+      ➕ Aggiungi intervista
+    </button>
   </div>
 
   <!-- NOTE PREPOSTO -->
@@ -1221,6 +1267,211 @@ const NC_MATRIX = {
 };
 
 
+
+// ==========================================
+// MODULO INTERVISTE OPERATIVE
+// ==========================================
+const DOMANDE_BASE = [
+  {id:'d01', testo:'Ha ricevuto formazione specifica per la mansione svolta in questo cantiere/reparto?'},
+  {id:'d02', testo:'Conosce i rischi principali della sua attivita lavorativa in questo sito?'},
+  {id:'d03', testo:'Sa dove si trova la cassetta di pronto soccorso piu vicina alla sua area di lavoro?'},
+  {id:'d04', testo:'Conosce il punto di raccolta in caso di evacuazione di emergenza?'},
+  {id:'d05', testo:'I DPI in uso le sono stati consegnati con ricevuta firmata?'},
+  {id:'d06', testo:'Sa come segnalare un near miss o un infortunio (es. SafeReport o procedura aziendale)?'},
+  {id:'d07', testo:'Ha partecipato a un briefing HSE nell ultimo mese?'},
+  {id:'d08', testo:'Sa chi e il suo preposto / referente per la sicurezza su questo sito?'},
+  {id:'d09', testo:'Ha mai subito pressioni a lavorare senza DPI o in condizioni che riteneva non sicure?'},
+  {id:'d10', testo:'Ha osservazioni o segnalazioni da fare all auditor in questo momento?'},
+];
+
+const DOMANDE_AVANZATE = [
+  {id:'d11', cat:'Formazione', testo:'Ha letto e firmato il POS / piano di sicurezza dell impresa per questo cantiere/reparto?'},
+  {id:'d12', cat:'Formazione', testo:'E a conoscenza delle procedure di emergenza specifiche di questo sito (numeri, percorsi, punti di raccolta)?'},
+  {id:'d13', cat:'Formazione', testo:'Sa utilizzare correttamente tutti i DPI assegnati: regolarli, mantenerli, verificarne l integrita?'},
+  {id:'d14', cat:'Formazione', testo:'Ha ricevuto informazioni sui rischi delle altre imprese presenti e sulle interferenze operative?'},
+  {id:'d15', cat:'Comportamento', testo:'Ritiene che i tempi di lavoro assegnati siano compatibili con il lavoro in sicurezza?'},
+  {id:'d16', cat:'Comportamento', testo:'Ha mai visto colleghi lavorare in condizioni pericolose senza che nessuno intervenisse?'},
+  {id:'d17', cat:'Comportamento', testo:'Quando rileva una situazione pericolosa, sa a chi segnalarla e lo fa effettivamente?'},
+  {id:'d18', cat:'Comportamento', testo:'Ha mai interrotto un lavoro per ragioni di sicurezza? Se si, ha ricevuto supporto dal preposto?'},
+  {id:'d19', cat:'Salute', testo:'E sottoposto a sorveglianza sanitaria periodica per la sua mansione?'},
+  {id:'d20', cat:'Salute', testo:'Ha ricevuto il giudizio di idoneita dal medico competente per le attivita che svolge?'},
+  {id:'d21', cat:'Salute', testo:'Utilizza sostanze chimiche nel lavoro? Sa leggere le etichette CLP e dove trovare le SDS?'},
+  {id:'d22', cat:'Attrezzature', testo:'Le attrezzature che utilizza sono in buono stato e ha ricevuto formazione specifica per usarle?'},
+  {id:'d23', cat:'Attrezzature', testo:'Sa come segnalare un guasto o un anomalia su una macchina/attrezzatura?'},
+  {id:'d24', cat:'Attrezzature', testo:'Prima di iniziare il lavoro esegue un controllo visivo delle attrezzature che utilizza?'},
+];
+
+const DOMANDE_PREPOSTO = [
+  {id:'d25', cat:'Ruolo', testo:'Effettua verifiche quotidiane sull uso corretto dei DPI da parte degli operatori?'},
+  {id:'d26', cat:'Ruolo', testo:'Ha ricevuto formazione specifica sul ruolo di preposto (obblighi, responsabilita, D.Lgs. 81/08)?'},
+  {id:'d27', cat:'Ruolo', testo:'In caso di situazione di pericolo grave e immediato, sa che ha l obbligo di interrompere i lavori?'},
+  {id:'d28', cat:'Ruolo', testo:'Tiene traccia delle segnalazioni ricevute dagli operatori e delle azioni intraprese?'},
+];
+
+let interviste = []; // [{id, soggetto, nome, mansione, risposte:{d01:{val,nota},...}, avanzateVisible}]
+let intervistaCounter = 0;
+
+function addIntervista() {
+  intervistaCounter++;
+  const intId = `int_${intervistaCounter}`;
+  interviste.push({ id: intId, soggetto:'', nome:'', mansione:'', risposte:{}, avanzateVisible:false });
+  renderInterviste();
+  // Scroll alla nuova intervista
+  setTimeout(() => {
+    const el = document.getElementById(`intblock-${intId}`);
+    if (el) el.scrollIntoView({behavior:'smooth', block:'start'});
+  }, 100);
+  saveDraft(false);
+}
+
+function removeIntervista(intId) {
+  if (!confirm('Rimuovere questa intervista?')) return;
+  interviste = interviste.filter(i => i.id !== intId);
+  renderInterviste();
+  saveDraft(false);
+}
+
+function renderInterviste() {
+  const container = document.getElementById('interviste-container');
+  container.innerHTML = '';
+  interviste.forEach((int, idx) => buildIntervistaBlock(container, int, idx));
+}
+
+function buildIntervistaBlock(container, int, idx) {
+  const isApicale = ['Preposto','Dirigente'].includes(int.soggetto);
+
+  const div = document.createElement('div');
+  div.className = 'intervista-block';
+  div.id = `intblock-${int.id}`;
+
+  // Header
+  div.innerHTML = `
+    <div class="intervista-header">
+      <span class="intervista-num">🎤 Intervista ${idx+1}${int.nome ? ' — '+int.nome : ''}</span>
+      <button class="intervista-del" onclick="removeIntervista('${int.id}')">✕ Rimuovi</button>
+    </div>
+    <div class="intervista-body">
+      <div class="intervista-sogg">
+        <div class="form-group">
+          <label class="form-label">Soggetto intervistato <span class="req">*</span></label>
+          <select class="form-control" onchange="updateIntervistaField('${int.id}','soggetto',this.value)">
+            <option value="">— Seleziona —</option>
+            <option ${int.soggetto==='Operatore'?'selected':''}>Operatore</option>
+            <option ${int.soggetto==='Preposto'?'selected':''}>Preposto</option>
+            <option ${int.soggetto==='Dirigente'?'selected':''}>Dirigente</option>
+            <option ${int.soggetto==='RSPP impresa'?'selected':''}>RSPP impresa</option>
+            <option ${int.soggetto==='Altro'?'selected':''}>Altro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nome e cognome</label>
+          <input type="text" class="form-control" autocomplete="off" value="${int.nome||''}"
+            placeholder="Nome cognome" oninput="updateIntervistaField('${int.id}','nome',this.value)">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Mansione / ruolo</label>
+        <input type="text" class="form-control" autocomplete="off" value="${int.mansione||''}"
+          placeholder="es. Installatore vetri, Caposquadra" oninput="updateIntervistaField('${int.id}','mansione',this.value)">
+      </div>
+
+      <div class="dom-section-label">Domande base (1-10)</div>
+      ${DOMANDE_BASE.map(d => buildDomandaHTML(int.id, d, int.risposte[d.id])).join('')}
+
+      <button class="toggle-avanzate" onclick="toggleAvanzate('${int.id}')">
+        ${int.avanzateVisible ? '▲ Nascondi' : '▼ Mostra'} domande avanzate (11-24)
+      </button>
+      <div class="domande-avanzate ${int.avanzateVisible?'show':''}" id="avanzate-${int.id}">
+        ${buildDomandeAvanzateHTML(int.id, int.risposte)}
+      </div>
+      ${isApicale ? `
+        <div class="dom-section-label" style="margin-top:10px;color:#c0392b">Domande specifiche ${int.soggetto} (25-28)</div>
+        ${DOMANDE_PREPOSTO.map(d => buildDomandaHTML(int.id, d, int.risposte[d.id])).join('')}
+      ` : ''}
+    </div>`;
+  container.appendChild(div);
+}
+
+function buildDomandaHTML(intId, domanda, risposta) {
+  const val = risposta?.val || '';
+  const nota = risposta?.nota || '';
+  const showNota = (val === 'PARZ' || val === 'NO' || nota);
+  return `
+    <div class="domanda-row" id="dom-${intId}-${domanda.id}">
+      <div class="domanda-testo">
+        <span class="dom-num">${domanda.id.replace('d','').replace(/^0/,'')+'.'}</span>
+        ${domanda.testo}
+        ${domanda.cat ? `<span class="dom-cat">[${domanda.cat}]</span>` : ''}
+      </div>
+      <div class="domanda-btns">
+        <button class="dom-btn ${val==='SI'?'sel':''}"   data-dval="SI"   onclick="setRisposta('${intId}','${domanda.id}','SI')">Si</button>
+        <button class="dom-btn ${val==='PARZ'?'sel':''}" data-dval="PARZ" onclick="setRisposta('${intId}','${domanda.id}','PARZ')">Parzialmente</button>
+        <button class="dom-btn ${val==='NO'?'sel':''}"   data-dval="NO"   onclick="setRisposta('${intId}','${domanda.id}','NO')">No</button>
+        <button class="dom-btn ${val==='NA'?'sel':''}"   data-dval="NA"   onclick="setRisposta('${intId}','${domanda.id}','NA')">N/A</button>
+      </div>
+      <textarea class="dom-nota ${(showNota)?'show':''}"
+        id="dnota-${intId}-${domanda.id}"
+        placeholder="Nota / osservazione..."
+        oninput="setNotaDomanda('${intId}','${domanda.id}',this.value)">${nota}</textarea>
+    </div>`;
+}
+
+function buildDomandeAvanzateHTML(intId, risposte) {
+  const cats = [...new Set(DOMANDE_AVANZATE.map(d => d.cat))];
+  return cats.map(cat => `
+    <div class="dom-section-label">${cat}</div>
+    ${DOMANDE_AVANZATE.filter(d=>d.cat===cat).map(d=>buildDomandaHTML(intId,d,risposte[d.id])).join('')}
+  `).join('');
+}
+
+function setRisposta(intId, domId, val) {
+  const int = interviste.find(i=>i.id===intId);
+  if (!int) return;
+  if (!int.risposte[domId]) int.risposte[domId] = {};
+  int.risposte[domId].val = val;
+  // Aggiorna UI senza fare re-render completo
+  const domRow = document.getElementById(`dom-${intId}-${domId}`);
+  if (domRow) {
+    domRow.querySelectorAll('.dom-btn').forEach(b => b.classList.toggle('sel', b.dataset.dval===val));
+    const nota = domRow.querySelector('.dom-nota');
+    if (nota) nota.classList.toggle('show', val==='PARZ'||val==='NO');
+  }
+  saveDraft(false);
+}
+
+function setNotaDomanda(intId, domId, val) {
+  const int = interviste.find(i=>i.id===intId);
+  if (!int) return;
+  if (!int.risposte[domId]) int.risposte[domId] = {};
+  int.risposte[domId].nota = val;
+  saveDraft(false);
+}
+
+function updateIntervistaField(intId, field, val) {
+  const int = interviste.find(i=>i.id===intId);
+  if (!int) return;
+  int[field] = val;
+  // Aggiorna header nome e, se cambio soggetto, ri-renderizza il blocco
+  if (field === 'soggetto') {
+    renderInterviste();
+  } else if (field === 'nome') {
+    const hdr = document.querySelector(`#intblock-${intId} .intervista-num`);
+    if (hdr) hdr.textContent = `🎤 Intervista ${interviste.indexOf(int)+1}${val ? ' — '+val : ''}`;
+  }
+  saveDraft(false);
+}
+
+function toggleAvanzate(intId) {
+  const int = interviste.find(i=>i.id===intId);
+  if (!int) return;
+  int.avanzateVisible = !int.avanzateVisible;
+  const avDiv = document.getElementById(`avanzate-${intId}`);
+  const btn   = document.querySelector(`#intblock-${intId} .toggle-avanzate`);
+  if (avDiv) avDiv.classList.toggle('show', int.avanzateVisible);
+  if (btn)   btn.textContent = (int.avanzateVisible ? '▲ Nascondi' : '▼ Mostra') + ' domande avanzate (11-24)';
+  saveDraft(false);
+}
+
 // ==========================================
 // STATO GLOBALE
 // ==========================================
@@ -1234,7 +1485,7 @@ const DRAFT_KEY = 'somec_audit_draft_v2';
 // AVVIO
 // ==========================================
 function startAudit(type) {
-  auditType = type; responses = {}; generalPhotos = []; sigData = {};
+  auditType = type; responses = {}; generalPhotos = []; sigData = {}; interviste = []; intervistaCounter = 0;
 
   const sitoSel = document.getElementById('f-sito');
   sitoSel.innerHTML = '<option value="">— Seleziona —</option>';
@@ -1638,7 +1889,7 @@ function collectFormData() {
     conclusioni: document.getElementById('f-conclusioni').value,
     ac: document.getElementById('f-ac').value,
     notePreposto: document.getElementById('f-note-preposto')?.value || '',
-    responses, generalPhotos,
+    responses, generalPhotos, interviste,
   };
 }
 
@@ -1685,6 +1936,12 @@ function restoreDraft(d) {
     if (r.photos?.length) renderVocePhotos(id);
   });
   renderGeneralPhotos();
+  // Ripristina interviste
+  if (d.interviste && d.interviste.length > 0) {
+    interviste = d.interviste;
+    intervistaCounter = interviste.length;
+    renderInterviste();
+  }
   updateCounts(); updateProgress();
   showToast('📂 Bozza ripristinata');
 }
@@ -2102,6 +2359,70 @@ function generatePDF() {
     });
     y = py+45;
     doc.setTextColor(0,0,0);
+  }
+
+  // Interviste operative
+  if (data.interviste && data.interviste.length > 0) {
+    checkY(20);
+    doc.setFillColor(26,74,122);
+    doc.rect(ML,y,CW,7,'F');
+    doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont('helvetica','bold');
+    doc.text('INTERVISTE OPERATIVE', ML+3, y+5);
+    doc.setTextColor(0,0,0); y+=10;
+
+    const allDomande = [...DOMANDE_BASE, ...DOMANDE_AVANZATE, ...DOMANDE_PREPOSTO];
+    const valLabels = {SI:'Si', PARZ:'Parzialmente', NO:'No', NA:'N/A'};
+    const valColors = {SI:[26,122,74], PARZ:[243,156,18], NO:[192,57,43], NA:[120,128,144]};
+
+    data.interviste.forEach((int, idx) => {
+      checkY(20);
+      // Header intervista
+      doc.setFillColor(235,242,252);
+      doc.rect(ML,y,CW,6,'F');
+      doc.setDrawColor(180,205,230); doc.rect(ML,y,CW,6,'S');
+      doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(26,74,122);
+      doc.text(`Intervista ${idx+1} — ${int.soggetto||'—'}${int.nome?' | '+int.nome:''}${int.mansione?' ('+int.mansione+')':''}`, ML+3, y+4.2);
+      doc.setTextColor(0,0,0); y+=8;
+
+      // Domande con risposta
+      const domandeConRisposta = allDomande.filter(d => int.risposte[d.id]?.val);
+      if (domandeConRisposta.length === 0) {
+        doc.setFontSize(7); doc.setFont('helvetica','italic'); doc.setTextColor(150,150,150);
+        doc.text('Nessuna risposta registrata.', ML+3, y); y+=6;
+        doc.setTextColor(0,0,0);
+      } else {
+        domandeConRisposta.forEach(d => {
+          const r = int.risposte[d.id];
+
+          // Pre-calcola righe nota per dimensionare il box correttamente
+          const nLines = r.nota ? doc.splitTextToSize('   Nota: '+r.nota, CW-10) : [];
+          const rowH = 7.5 + (nLines.length > 0 ? 2 + nLines.length*3.8 + 2 : 0);
+          checkY(rowH + 2);
+
+          const vc = valColors[r.val]||[150,150,150];
+          doc.setFillColor(248,250,252); doc.rect(ML,y,CW,rowH,'F');
+          doc.setDrawColor(215,220,228); doc.rect(ML,y,CW,rowH,'S');
+          // Badge risposta
+          doc.setFillColor(...vc);
+          doc.rect(ML+CW-20,y+1,18,4.5,'F');
+          doc.setTextColor(255,255,255); doc.setFontSize(6.5); doc.setFont('helvetica','bold');
+          doc.text(valLabels[r.val]||r.val, ML+CW-20+9, y+4, {align:'center'});
+          // Testo domanda
+          doc.setTextColor(30,30,30); doc.setFontSize(7); doc.setFont('helvetica','normal');
+          const dLines = doc.splitTextToSize(`${d.id.replace('d','').replace(/^0/,'')}. ${d.testo}`, CW-24);
+          doc.text(dLines[0], ML+3, y+4.5);
+          y+=7.5;
+          // Nota — dentro il box già dimensionato
+          if (nLines.length > 0) {
+            doc.setFontSize(6.5); doc.setFont('helvetica','italic'); doc.setTextColor(80,80,80);
+            nLines.forEach(l => { doc.text(l, ML+5, y); y+=3.8; });
+            y+=2; doc.setTextColor(0,0,0);
+          }
+          y+=2;
+        });
+      }
+      y+=4;
+    });
   }
 
   // Firme
