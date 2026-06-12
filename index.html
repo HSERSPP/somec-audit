@@ -389,10 +389,15 @@ textarea.form-control{min-height:70px;resize:vertical}
     <h3>Foto generali (non legate a singole voci)</h3>
   </div>
   <div class="sec-body" style="padding:14px">
-    <div class="photo-zone" onclick="document.getElementById('photo-input-gen').click()">
-      <input type="file" id="photo-input-gen" accept="image/*" multiple onchange="addGeneralPhotos(this)">
-      <div style="font-size:24px">📷</div>
-      <div style="font-size:13px;color:var(--gray-mid);margin-top:4px">Tocca per aggiungere foto generali<br><span style="font-size:11px;color:#aaa">Per le foto di singole NC/OBS usa il tasto 📷 accanto a ogni voce</span></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <label class="cl-photo-btn" style="flex:1;justify-content:center;padding:14px;border-radius:var(--radius-lg)">
+        <input type="file" accept="image/*" capture="environment" onchange="addGeneralPhotos(this)">
+        <span style="font-size:20px">📷</span><span style="margin-left:6px;font-size:13px;font-weight:700">Scatta foto</span>
+      </label>
+      <label class="cl-photo-btn" style="flex:1;justify-content:center;padding:14px;border-radius:var(--radius-lg)">
+        <input type="file" accept="image/*" multiple onchange="addGeneralPhotos(this)">
+        <span style="font-size:20px">🖼</span><span style="margin-left:6px;font-size:13px;font-weight:700">Scegli dalla galleria</span>
+      </label>
     </div>
     <div class="photo-grid" id="photo-grid-gen"></div>
   </div>
@@ -1579,8 +1584,12 @@ function buildRow(container, voce, type) {
     <textarea class="cl-note" id="note-${voce.id}" placeholder="Descrizione osservazione / non conformita'..." oninput="saveNote('${voce.id}',this.value)"></textarea>
     <div class="cl-photo-area">
       <label class="cl-photo-btn">
+        <input type="file" accept="image/*" capture="environment" onchange="addVocePhoto('${voce.id}',this)">
+        📷 Scatta foto
+      </label>
+      <label class="cl-photo-btn">
         <input type="file" accept="image/*" multiple onchange="addVocePhoto('${voce.id}',this)">
-        📷 Aggiungi foto
+        🖼 Galleria
       </label>
       <div class="cl-photo-thumbs" id="pthumbs-${voce.id}"></div>
     </div>`;
@@ -1740,9 +1749,12 @@ function addVocePhoto(id, input) {
     if (file.size > 6*1024*1024) { showToast('⚠️ Foto troppo grande (max 6MB)'); return; }
     const r = new FileReader();
     r.onload = e => {
-      responses[id].photos.push({ dataUrl: e.target.result, caption: '' });
-      renderVocePhotos(id);
-      saveDraft(false);
+      // Correggi orientamento subito al caricamento
+      correctImageOrientation(e.target.result).then(corrected => {
+        responses[id].photos.push({ dataUrl: corrected, caption: '' });
+        renderVocePhotos(id);
+        saveDraft(false);
+      });
     };
     r.readAsDataURL(file);
   });
@@ -1774,7 +1786,12 @@ function addGeneralPhotos(input) {
   Array.from(input.files).forEach(file => {
     if (file.size > 6*1024*1024) { showToast('⚠️ Foto troppo grande (max 6MB)'); return; }
     const r = new FileReader();
-    r.onload = e => { generalPhotos.push({ dataUrl: e.target.result, caption: '' }); renderGeneralPhotos(); };
+    r.onload = e => {
+      correctImageOrientation(e.target.result).then(corrected => {
+        generalPhotos.push({ dataUrl: corrected, caption: '' });
+        renderGeneralPhotos();
+      });
+    };
     r.readAsDataURL(file);
   });
   input.value = '';
@@ -2007,70 +2024,31 @@ function scrollToFirstMissing() {
 // GENERA PDF -- foto inline per voce
 // ==========================================
 // ==========================================
-// CORREZIONE ORIENTAMENTO FOTO (EXIF) — versione asincrona
-// Legge il tag EXIF orientation e ruota il canvas prima di inserire nel PDF
-// ==========================================
-function getExifOrientation(dataUrl) {
-  try {
-    const binary = atob(dataUrl.split(',')[1]);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    for (let i = 0; i < bytes.length - 1; i++) {
-      if (bytes[i] === 0xFF && bytes[i+1] === 0xE1) {
-        const exifStart = i + 10;
-        if (exifStart >= bytes.length) break;
-        const littleEndian = bytes[exifStart] === 0x49;
-        for (let j = exifStart; j < Math.min(exifStart + 2048, bytes.length - 4); j++) {
-          if (bytes[j] === 0x01 && bytes[j+1] === 0x12) {
-            const valOffset = j + 8;
-            if (valOffset + 1 >= bytes.length) break;
-            return littleEndian
-              ? bytes[valOffset] + bytes[valOffset+1]*256
-              : bytes[valOffset]*256 + bytes[valOffset+1];
-          }
-        }
-        break;
-      }
-    }
-  } catch(e) {}
-  return 1;
+// CORREZIONE ORIENTAMENTO FOTO
+// Usa canvas con drawImage — il browser applica automaticamente
+// la correzione EXIF quando disegna l'immagine su canvas
+// Questo e il metodo piu affidabile su tutti i dispositivi mobile
+function correctImageOrientation(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width  = img.naturalWidth  || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => resolve(dataUrl);
+    // Impostare crossOrigin non serve per dataUrl locali
+    img.src = dataUrl;
+  });
 }
 
-function correctImageOrientation(dataUrl) {
-  // Versione sincrona: usa un canvas con Image gia caricata
-  // Le immagini sono gia in memoria (dataUrl da FileReader) quindi sono gia caricate
-  const orientation = getExifOrientation(dataUrl);
-  if (orientation === 1) return dataUrl;
-
-  const img = new Image();
-  img.src = dataUrl;
-
-  // Forza il caricamento sincrono — l immagine e gia in memoria come dataUrl
-  // quindi il browser la ha gia decodificata quando e stata letta da FileReader
-  const iw = img.naturalWidth  || img.width  || 1200;
-  const ih = img.naturalHeight || img.height || 900;
-
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-
-  const swap = (orientation >= 5 && orientation <= 8);
-  canvas.width  = swap ? ih : iw;
-  canvas.height = swap ? iw : ih;
-
-  ctx.save();
-  switch(orientation) {
-    case 2: ctx.translate(canvas.width,0);  ctx.scale(-1,1);  break;
-    case 3: ctx.translate(canvas.width,canvas.height); ctx.rotate(Math.PI); break;
-    case 4: ctx.translate(0,canvas.height); ctx.scale(1,-1);  break;
-    case 5: ctx.rotate(0.5*Math.PI);  ctx.scale(1,-1);  break;
-    case 6: ctx.rotate(0.5*Math.PI);  ctx.translate(0,-canvas.width); break;
-    case 7: ctx.rotate(-0.5*Math.PI); ctx.translate(-canvas.height,canvas.width); ctx.scale(1,-1); break;
-    case 8: ctx.rotate(-0.5*Math.PI); ctx.translate(-canvas.height,0); break;
-  }
-  ctx.drawImage(img, 0, 0);
-  ctx.restore();
-
-  return canvas.toDataURL('image/jpeg', 0.85);
+// Versione sincrona fallback (per compatibilita con il codice PDF esistente)
+// che usa la Promise internamente — il PDF aspetta il risultato
+async function correctImageOrientationAsync(dataUrl) {
+  return correctImageOrientation(dataUrl);
 }
 
 function generatePDF() {
@@ -2245,7 +2223,7 @@ function generatePDF() {
         r.photos.forEach((ph, pi) => {
           if (px+44 > W-MR) { px=ML+6; py+=52; checkY(52); }
           try {
-            const corrected = correctImageOrientation(ph.dataUrl);
+            const corrected = ph.dataUrl; // orientamento gestito al momento del caricamento
             doc.addImage(corrected,'JPEG',px,py,42,32);
             if (ph.caption) {
               doc.setFontSize(6); doc.setFont('helvetica','italic'); doc.setTextColor(80,80,80);
@@ -2348,7 +2326,7 @@ function generatePDF() {
     generalPhotos.forEach((ph,i) => {
       if(px+54>W-MR) { px=ML; py+=50; checkY(52); }
       try {
-        const corrected = correctImageOrientation(ph.dataUrl);
+        const corrected = ph.dataUrl; // orientamento gestito al momento del caricamento
         doc.addImage(corrected,'JPEG',px,py,52,38);
         if(ph.caption) {
           doc.setFontSize(6); doc.setFont('helvetica','italic'); doc.setTextColor(80,80,80);
