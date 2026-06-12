@@ -390,7 +390,7 @@ textarea.form-control{min-height:70px;resize:vertical}
   </div>
   <div class="sec-body" style="padding:14px">
     <div class="photo-zone" onclick="document.getElementById('photo-input-gen').click()">
-      <input type="file" id="photo-input-gen" accept="image/*" capture="environment" multiple onchange="addGeneralPhotos(this)">
+      <input type="file" id="photo-input-gen" accept="image/*" multiple onchange="addGeneralPhotos(this)">
       <div style="font-size:24px">📷</div>
       <div style="font-size:13px;color:var(--gray-mid);margin-top:4px">Tocca per aggiungere foto generali<br><span style="font-size:11px;color:#aaa">Per le foto di singole NC/OBS usa il tasto 📷 accanto a ogni voce</span></div>
     </div>
@@ -1579,7 +1579,7 @@ function buildRow(container, voce, type) {
     <textarea class="cl-note" id="note-${voce.id}" placeholder="Descrizione osservazione / non conformita'..." oninput="saveNote('${voce.id}',this.value)"></textarea>
     <div class="cl-photo-area">
       <label class="cl-photo-btn">
-        <input type="file" accept="image/*" capture="environment" multiple onchange="addVocePhoto('${voce.id}',this)">
+        <input type="file" accept="image/*" multiple onchange="addVocePhoto('${voce.id}',this)">
         📷 Aggiungi foto
       </label>
       <div class="cl-photo-thumbs" id="pthumbs-${voce.id}"></div>
