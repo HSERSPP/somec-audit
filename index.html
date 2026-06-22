@@ -2067,18 +2067,8 @@ async function correctImageOrientationAsync(dataUrl) {
   return correctImageOrientation(dataUrl);
 }
 
-function generatePDF() {
+function buildAuditPDF() {
   const data = collectFormData();
-  if (!data.sito || !data.data) { showToast('⚠️ Completa Sito e Data'); return; }
-
-  // VALIDAZIONE -- tutte le voci devono essere valorizzate
-  const missing = validateChecklist();
-  if (missing.length > 0) {
-    showValidationModal(missing);
-    return;
-  }
-
-  showToast('📄 Generazione PDF...');
 
   const {jsPDF} = window.jspdf;
   const doc = new jsPDF({orientation:'p',unit:'mm',format:'a4'});
@@ -2442,10 +2432,26 @@ function generatePDF() {
   }
 
   const fn = `AUDIT_HSE_${data.sito.replace(/[^a-zA-Z0-9]/g,'_').toUpperCase()}_${data.data}.pdf`;
-  doc.save(fn);
-  showToast('✅ PDF salvato: '+fn);
+  return { doc, filename: fn };
+}
+
+function generatePDF() {
+  const data = collectFormData();
+  if (!data.sito || !data.data) { showToast('⚠️ Completa Sito e Data'); return; }
+
+  const missing = validateChecklist();
+  if (missing.length > 0) {
+    showValidationModal(missing);
+    return;
+  }
+
+  showToast('📄 Generazione PDF...');
+  const { doc, filename } = buildAuditPDF();
+  doc.save(filename);
+  showToast('✅ PDF salvato: '+filename);
   localStorage.removeItem(DRAFT_KEY);
 }
+
 
 // ==========================================
 // EMAIL MULTI-DESTINATARIO
@@ -2605,44 +2611,9 @@ async function confirmSend() {
 
 // Genera il PDF e restituisce il contenuto in base64 (senza data: prefix)
 async function generatePDFBase64() {
-  return new Promise((resolve, reject) => {
-    try {
-      // Riutilizza la logica di generatePDF ma restituisce base64
-      const {jsPDF} = window.jspdf;
-      const data = collectFormData();
-      const doc = new jsPDF({orientation:'p',unit:'mm',format:'a4'});
-      const W=210, ML=14, MR=14, CW=W-ML-MR;
-
-      const drawPageHeader = () => {
-        doc.setFillColor(26,74,122); doc.rect(0,0,W,18,'F');
-        try { doc.addImage(SOMEC_LOGO_B64,'PNG',ML,2,38,14); } catch(e){}
-        doc.setTextColor(255,255,255); doc.setFontSize(9.5); doc.setFont('helvetica','bold');
-        doc.text('RAPPORTO DI VERIFICA ISPETTIVA', ML+42, 8);
-        doc.setFontSize(7); doc.setFont('helvetica','normal');
-        doc.text(data.auditType==='cantiere'?'MOD7.401-07 rev01 — Cantieri':'MOD7.401-08 rev02 — Stabilimento', ML+42, 14);
-        doc.setDrawColor(208,74,26); doc.setLineWidth(1.2); doc.line(0,18,W,18);
-        doc.setLineWidth(0.2); doc.setDrawColor(200,200,200); doc.setTextColor(0,0,0);
-      };
-
-      let y = 26;
-      const addPage = () => { doc.addPage(); drawPageHeader(); y=26; };
-      const checkY = (need=20) => { if(y+need>282) addPage(); };
-      drawPageHeader();
-
-      // Chiama la funzione esistente che popola il doc
-      // Per semplicita richiama generatePDF() che salva il file,
-      // e parallelamente usiamo output('datauristring') per ottenere il base64
-      // Trick: sovrascriviamo temporaneamente doc.save
-      const origSave = doc.save.bind(doc);
-      // Usa direttamente output
-      const pdfOutput = doc.output('datauristring');
-      // Estrai solo il base64 (rimuovi "data:application/pdf;base64,")
-      const base64 = pdfOutput.split(',')[1];
-      resolve(base64);
-    } catch(e) {
-      reject(e);
-    }
-  });
+  const { doc } = buildAuditPDF();
+  const pdfOutput = doc.output('datauristring');
+  return pdfOutput.split(',')[1];
 }
 
 function var_green_bg() { return '#e8f5ee'; }
