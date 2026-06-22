@@ -2603,8 +2603,16 @@ async function confirmSend() {
       throw new Error(err.message || 'Errore API Brevo ('+resp.status+')');
     }
   } catch(e) {
-    statusEl.style.background='#fdecea';
-    statusEl.innerHTML = `❌ Errore invio: ${e.message}. Prova a scaricare il PDF manualmente.`;
+    // "Failed to fetch" capita spesso su mobile quando la connessione
+    // viene interrotta DOPO che la richiesta e partita (cambio rete, standby schermo).
+    // In questi casi l'email arriva comunque a destinazione.
+    if (e.message === 'Failed to fetch' || e.message.includes('NetworkError')) {
+      statusEl.style.background='#fff8e8';
+      statusEl.innerHTML = `⚠️ Connessione instabile durante l'invio. Il report e l'allegato sono probabilmente arrivati comunque — controlla la posta prima di reinviare.`;
+    } else {
+      statusEl.style.background='#fdecea';
+      statusEl.innerHTML = `❌ Errore invio: ${e.message}. Prova a scaricare il PDF manualmente.`;
+    }
     document.getElementById('btn-confirm-send').disabled=false;
   }
 }
