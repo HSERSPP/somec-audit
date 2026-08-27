@@ -1604,11 +1604,22 @@ function onRepartoChange() {
   aggiornaDpiInfo();
 
   // Aggiorna la checklist stabilimento in base al reparto
+  // SOLO se la checklist non è ancora stata costruita (evita perdita dati)
   if (auditType === 'stabilimento') {
-    buildChecklist('stabilimento');
+    const container = document.getElementById('checklist-container');
+    if (!container || container.innerHTML.trim() === '') {
+      buildChecklist('stabilimento');
+    }
   }
   // Aggiorna checklist attrezzature specifica per reparto
-  buildAttrezzatureChecklist();
+  // SOLO se non già presente per questo reparto
+  const repartoAttr = document.getElementById('f-reparto')?.value;
+  const attrContainer = document.getElementById('attr-checklist-container');
+  const firstAttrId = attrContainer?.querySelector('[id]')?.id;
+  const expectedFirstId = repartoAttr && CHECKLIST_ATTREZZATURE[repartoAttr] ? CHECKLIST_ATTREZZATURE[repartoAttr][0]?.id : null;
+  if (!firstAttrId || firstAttrId !== `row-${expectedFirstId}`) {
+    buildAttrezzatureChecklist();
+  }
 }
 
 function aggiornaDpiInfo() {
@@ -2252,8 +2263,13 @@ function showValidationModal(missing) {
 function scrollToVoce(id) {
   const el = document.getElementById(`row-${id}`);
   if (el) {
-    el.scrollIntoView({ behavior:'smooth', block:'center' });
-    // Evidenzia brevemente la riga
+    // Usa getBoundingClientRect + window.scrollTo invece di scrollIntoView
+    // per evitare re-render su Android
+    const rect = el.getBoundingClientRect();
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const targetY = rect.top + scrollTop - 100; // 100px offset per header sticky
+    window.scrollTo({ top: targetY, behavior: 'smooth' });
+    // Evidenzia brevemente
     el.style.outline = '3px solid #c0392b';
     el.style.outlineOffset = '2px';
     setTimeout(() => { el.style.outline=''; el.style.outlineOffset=''; }, 2500);
