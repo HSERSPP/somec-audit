@@ -2296,31 +2296,36 @@ function scrollToFirstMissing() {
 function correctImageOrientation(dataUrl) {
   return new Promise((resolve) => {
     const img = new Image();
-    // Aspetta che l'immagine sia COMPLETAMENTE caricata prima di disegnare
     img.onload = () => {
       try {
+        // -- COMPRESSIONE: ridimensiona a max 1200px lato lungo --
+        const MAX_SIZE = 1200;
+        let w = img.naturalWidth  || img.width  || 1;
+        let h = img.naturalHeight || img.height || 1;
+        if (w > MAX_SIZE || h > MAX_SIZE) {
+          if (w >= h) { h = Math.round(h * MAX_SIZE / w); w = MAX_SIZE; }
+          else        { w = Math.round(w * MAX_SIZE / h); h = MAX_SIZE; }
+        }
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        canvas.width  = img.naturalWidth  || img.width  || 1;
-        canvas.height = img.naturalHeight || img.height || 1;
-        // drawImage con immagine caricata applica automaticamente la correzione EXIF
-        // nei browser moderni (Chrome 81+, Safari 15+, Firefox 78+)
-        ctx.drawImage(img, 0, 0);
-        const corrected = canvas.toDataURL('image/jpeg', 0.88);
-        // Verifica che il risultato sia valido
+        canvas.width  = w;
+        canvas.height = h;
+        // drawImage applica correzione EXIF automatica nei browser moderni
+        // e ridimensiona al tempo stesso
+        ctx.drawImage(img, 0, 0, w, h);
+        // Qualita 0.65 = ottima per uso documentale, ~10x piu leggera dell originale
+        const corrected = canvas.toDataURL('image/jpeg', 0.65);
         if (corrected && corrected.length > 100) {
           resolve(corrected);
         } else {
-          resolve(dataUrl); // fallback
+          resolve(dataUrl);
         }
       } catch(e) {
-        resolve(dataUrl); // fallback in caso di errore
+        resolve(dataUrl);
       }
     };
     img.onerror = () => resolve(dataUrl);
-    // Imposta src DOPO aver definito onload
     img.src = dataUrl;
-    // Se l'immagine e gia in cache e onload non scatta
     if (img.complete && img.naturalWidth > 0) {
       img.onload();
     }
