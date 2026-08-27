@@ -2821,16 +2821,13 @@ async function confirmSend() {
       </div>
     </div>`;
 
-  // Invia via Brevo API con allegato
+  // Invia via Cloudflare Worker proxy (stesso del SafeReport)
   const toList = emails.map(e => ({email: e}));
 
   try {
-    const resp = await fetch('https://api.brevo.com/v3/smtp/email', {
+    const resp = await fetch('https://somec-brevo-proxy.som-marco-sterchele.workers.dev', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'api-key': BREVO_API_KEY
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         sender: { name: BREVO_FROM_NAME, email: BREVO_FROM_EMAIL },
         to: toList,
