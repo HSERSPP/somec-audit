@@ -2493,23 +2493,41 @@ function buildAuditPDF() {
         doc.setTextColor(0,0,0); y+=7;
       }
 
-      // ★ FOTO INLINE per voce (OBS e NC) con correzione orientamento EXIF
+      // ★ FOTO INLINE per voce (OBS e NC)
       if ((val==='OBS'||val==='NC') && r.photos?.length) {
-        checkY(46);
+        // Calcola quante righe di foto servono
+        const photosPerRow = 3;
+        const photoW = 42, photoH = 32, photoGap = 47, rowH = 38;
+        const nRows = Math.ceil(r.photos.length / photosPerRow);
+        const totalH = nRows * rowH + 6;
+        checkY(Math.min(totalH, rowH + 6)); // almeno una riga
+
         let px = ML+6, py = y;
+        let currentRow = 0;
+
         r.photos.forEach((ph, pi) => {
-          if (px+44 > W-MR) { px=ML+6; py+=52; checkY(52); }
+          // Nuova riga di foto
+          if (pi > 0 && pi % photosPerRow === 0) {
+            currentRow++;
+            px = ML+6;
+            py += rowH;
+            // Se la nuova riga non entra nella pagina corrente
+            if (py + photoH > 282) {
+              addPage(); // addPage aggiorna y globale
+              py = y;   // sincronizza py con il nuovo y dopo cambio pagina
+              px = ML+6;
+            }
+          }
           try {
-            const corrected = ph.dataUrl; // orientamento gestito al momento del caricamento
-            doc.addImage(corrected,'JPEG',px,py,42,32);
+            doc.addImage(ph.dataUrl,'JPEG',px,py,photoW,photoH);
             if (ph.caption) {
               doc.setFontSize(6); doc.setFont('helvetica','italic'); doc.setTextColor(80,80,80);
-              doc.text(ph.caption, px, py+34, {maxWidth:42});
+              doc.text(ph.caption, px, py+photoH+2, {maxWidth:photoW});
             }
           } catch(e){}
-          px+=47;
+          px += photoGap;
         });
-        y = py + 38;
+        y = py + rowH;
         doc.setTextColor(0,0,0);
       }
       y+=2;
