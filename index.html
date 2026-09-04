@@ -577,6 +577,7 @@ textarea.form-control{min-height:70px;resize:vertical}
 // ==========================================
 // CONFIG BREVO (ex Sendinblue) — con allegato PDF
 // ==========================================
+const BREVO_API_KEY = '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';
 const BREVO_FROM_EMAIL = 'som.marco.sterchele@gmail.com';
 const BREVO_FROM_NAME  = 'SOMEC HSE Audit App';
 
@@ -2778,9 +2779,13 @@ function buildAuditPDF() {
     doc.setTextColor(0,0,0); y+=10;
     let px=ML, py=y;
     generalPhotos.forEach((ph,i) => {
-      if(px+54>W-MR) { px=ML; py+=50; checkY(52); }
+      if(px+54>W-MR) {
+        px=ML; py+=50;
+        if(py+52>282) { addPage(); py=y; }
+      }
+      if(py+52>282) { addPage(); px=ML; py=y; }
       try {
-        const corrected = ph.dataUrl; // orientamento gestito al momento del caricamento
+        const corrected = ph.dataUrl;
         doc.addImage(corrected,'JPEG',px,py,52,38);
         if(ph.caption) {
           doc.setFontSize(6); doc.setFont('helvetica','italic'); doc.setTextColor(80,80,80);
