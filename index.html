@@ -8,6 +8,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 <title>MOD7.401 — Audit HSE | Somec Navale</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+  // Fallback: se il CDN primario (cdnjs) non carica jsPDF, prova un secondo CDN (jsdelivr)
+  window.addEventListener('load', function() {
+    if (!window.jspdf) {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+      document.head.appendChild(s);
+    }
+  });
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2501,6 +2511,10 @@ async function correctImageOrientationAsync(dataUrl) {
 function buildAuditPDF() {
   const data = collectFormData();
 
+  if (!window.jspdf) {
+    alert('⏳ La libreria per generare il PDF non è ancora pronta (probabile connessione lenta o rete che blocca il caricamento). Attendi qualche secondo e riprova. Se il problema persiste, prova a ricaricare la pagina (tasto aggiorna del browser).');
+    throw new Error('jsPDF non disponibile');
+  }
   const {jsPDF} = window.jspdf;
   const doc = new jsPDF({orientation:'p',unit:'mm',format:'a4'});
   const W=210, ML=14, MR=14, CW=W-ML-MR;
@@ -2779,13 +2793,9 @@ function buildAuditPDF() {
     doc.setTextColor(0,0,0); y+=10;
     let px=ML, py=y;
     generalPhotos.forEach((ph,i) => {
-      if(px+54>W-MR) {
-        px=ML; py+=50;
-        if(py+52>282) { addPage(); py=y; }
-      }
-      if(py+52>282) { addPage(); px=ML; py=y; }
+      if(px+54>W-MR) { px=ML; py+=50; checkY(52); }
       try {
-        const corrected = ph.dataUrl;
+        const corrected = ph.dataUrl; // orientamento gestito al momento del caricamento
         doc.addImage(corrected,'JPEG',px,py,52,38);
         if(ph.caption) {
           doc.setFontSize(6); doc.setFont('helvetica','italic'); doc.setTextColor(80,80,80);
